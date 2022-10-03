@@ -354,5 +354,17 @@ Once we've done this, we can finalize our implementation of our `encode` functio
 
 ```js
 composed = this.addBytePadding(composed, capacity);
-return pattern
+return composed
+```
+
+For the string
+
+```
+HELLO WORLD+-/123$%
+```
+
+our `composed` bit string is:
+
+```
+00100000100110110000101101111000110100010111001011011100010011010100010011100011110110000000000101111000101011001001100000000000111011000001000111101100
 ```
