@@ -163,6 +163,10 @@ class QRCodeGenerator {
             // Check if all characters are numeric
             numeric &= QRCodeConstants.Numeric.indexOf(data[i]) >= 0;
             alphanum = QRCodeConstants.Alphanumeric.indexOf(data[i]) >= 0;
+
+            if (!numeric) {
+                break;
+            }
         }
     
         return numeric ? "numeric" : "alphanum";

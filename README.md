@@ -1,11 +1,12 @@
-# Introduction
+# About
 
-Welcome to my first article.
+This tutorial contains a sort of tutorial on how to create a simple QR code generator in Javascript.
 
+!['Hello World' QR code](img/qr_code_header.png)
 
-## About
+## Tutorial
 
-QR codes are ubiquitous and can be found nearly everywhere on physical items to websites and apps. While there are many libraries that make encoding/decoding very simple, there are, is far as I know, no good tutorials that show how to write a QR code generator from scratch. This now is exactly the goal of this article: To just use some Javascript and a HTML5 canvas item to produce QR codes that you can scan and decode with your phone. So let's jump into it.
+QR codes are ubiquitous and can be found nearly everywhere on physical items to websites and apps. While there are many libraries that make encoding/decoding very simple, there are, is far as I know, no good tutorials that show how to write a QR code generator from scratch. This now is exactly the goal of this repository: To just use some Javascript and an HTML svg element to produce QR codes that you can scan and decode with your phone. So let's jump into it.
 
 
 ## General
@@ -17,22 +18,28 @@ First, create a new html file **qrcode.html** that looks like this:
 <html>
     <head></head>
     <body>
-        <canvas id="qr"></canvas>
-    </body>
+        <svg width="256" height="256" id="qrcode_svg">
+        </svg>
 
-    <script src="qr_code.js"></script>
+        <script src="../js/error_correction.js"></script>
+        <script src="../js/qr_code.js"></script>
+    </body>
 </html>
 ```
 
-and a Javascript file **qr_code.js**. The html file contains a `canvas` element where we will draw our generated code.
+and two Javascript files **qr_code.js, error_correction.js**. The HTML part is already done and contains only a simple svg element where we will draw our QR code.
 
 ## Setup
 
-Before actually coding, it's a good idea to structure our project into some classes in order to extend our implementation later if we want to. For this, I defined three classes **QRCodeUtility, QRCodeConstants, QRCodeGenerator** which later on will contain utility functions, constants used in the encoding process and an actual generator class. 
+Before actually coding, it's a good idea to structure our project into some classes in order to be able to extend our implementation later if we want to. For this, I defined three classes **QRCodeUtility, QRCodeConstants, QRCodeGenerator** in **qr_code.js** which will contain utility functions, constants used in the encoding process and an actual generator class.
+
+The **error_correction.js** file only contains one class **ReedSolomonCode** that deals with adding error correction bits to our messages.
+
+
 
 ## Data Analysis
 
-First, we need to decide what we actually want to encode:
+First, we need to decide what we actually want to encode, so let's create a constructor for our generator:
 
 ```js
 class QRCodeGenerator {
@@ -43,15 +50,14 @@ class QRCodeGenerator {
 }
 ```
 
-In general, the QR code specification supports four different encoding modes:
+The QR code specification has different encoding modes, depending on the use case of the code. In general, there are four different modes:
 
  - Numeric (Numbers 0 - 9)
  - Alphanumeric (Numbers 0 - 9; Uppercase letters; Symbols $,%,*,+,-,.,/)
-    - superset of numeric mode
  - Kanji
  - Byte
 
-In order to keep this article short, I decided to only support alphanumeric mode which means that we **cannot encode lowercase characters**. This limitation can be easily lifted but requires some boring case work so I decided to not include it.
+In order to keep this tutorial short, I decided to only support alphanumeric mode which means that we **cannot encode lowercase characters**. This limitation can be easily lifted but requires some boring case work so I decided against it.
 
 Define the different characters that can be used in our constant class and a lookup:
 
@@ -88,29 +94,33 @@ determineMode() {
 ```
 
 It just loops over all characters in our data string and checks to which class it belongs. By Anding the values in the numeric variable we make sure that we are only
-in the numeric mode if all characters are numeric. Else, we immediately can tell that we will need alphanumeric mode.
+in the numeric mode if all characters are numeric. Else, we immediately can tell that we will need alphanumeric encoding.
 
 ## Data Encoding
 
-After we determined the encoding mode we need to incorporate an error correction level. Depending on the use case for the generated QR code, different error correction capabilities might be necessary (physically printed QR code that might get distorted need a higher error correction level than a QR code generated on screen). The standard defines four different levels:
+After we determined the encoding mode we need to incorporate an error correction level. Depending on the use case for the generated QR code, different error correction capabilities might be necessary (physically printed QR codes that might get distorted need a higher error correction level than a QR code generated on a computer screen). The standard defines four different levels:
 
  - L: recover up to 7% of data
  - M: recover up to 15% of data
  - Q: recover up to 25% of data
  - H: recover up to 30% of data
 
-Once again, as in the encoding part, I decided to only support the level L because supporting different levels lead again to some uninteresting case work. After this, we need to select which version of QR code to use. The version depends on how many characters we want to encode. There are fourty different versions, where version 1 supports up to 20 characters and version 40 supports 4296 characters.
+Once again, as in the encoding part, I decided to only support the level L because supporting different levels will lead again to some uninteresting case work.
 
-I'm sorry to tell you once more, that the article restricts to a subset and only supports version 1. This means that with our QR code generator we can encode **up to 20 uppercase characters**. I hope not to disappoint you at this point as our generator is quite limited (we're basically restricted to uppercase english words). However, there's still some interesting stuff waiting for you.
 
-The specification now divides our encoding in four parts:
+After this, we need to select which version of QR code to use. The version depends on how many characters we want to encode. There are fourty different versions, where version 1 supports up to 20 characters and version 40 supports 4296 characters. I'm sorry to tell you once more, that the article restricts to a subset and only supports version 1. This means that with our QR code generator we can encode **up to 20 uppercase characters**. I hope not to disappoint you at this point as our generator is quite limited (we're basically restricted to uppercase english words). However, there's still some interesting stuff waiting for you and if you want, you can later on add different versions.
 
-    - Mode indicator: Indication which mode we use for encoding (numeric/alphanumeric)
-    - Character count: The length of our data string
-    - Data: The actual data
-    - Terminator: Trailing bits to fit the entire space of available squares
 
-### Mode Indication
+### Encoding
+
+We won't simply encode our data and draw them on our svg element. In order for QR code readers to understand our data bits, we need to provide additional information.
+There are overall four different parts of our encoded message:
+ - **Mode indicator**: Indication which mode we use for encoding (numerical/alphanumeric)
+    - **Character count**: The length of our data string (e.g. for 'HELLO WORLD' it would be 11)
+    - **Data**: The actual data
+    - **Terminator**: Trailing bits to fill the entire space of our QR code and to not leave it blank
+
+#### Mode Indication
 
 For the mode indicator, simply define some constants:
 
@@ -122,21 +132,25 @@ For the mode indicator, simply define some constants:
     }
 ```
 
+When we compose our message later on, we will simple look the mode up in this dictionary.
+
 ### Character count
 
 The character count is now a binary number that depends on the mode we use. If we use numeric mode, then it is 9 bits long (possibly padded). If we use alphanumeric mode, then it is 10 bits long (of course this is only for version 1. Other versions have different lengths).
 
-For this define the following utility function which converts a number to a base-2 string:
+For this define the following utility function which converts a number to a binary string:
 
 ```js
-// ... clas QRCodeUtility
+// ... class QRCodeUtility
     static decimalToBinary(dec) {
         return (dec >>> 0).toString(2);
     }
 ```
 
 and in `QRCodeGenerator` define a new function `getCharacterCountIndicator()`:
+
 ```js
+// ... class QRCodeGenerator
 getCharacterCountIndicator() {
     let len = this.data.length;
     let bin = QRCodeUtility.decimalToBinary(len);
@@ -145,15 +159,17 @@ getCharacterCountIndicator() {
 }
 ```
 
-We simply compute the binary number from the length of our data string and afterwards look it up in the following hash table:
+We first compute the binary number from the length of our data string and afterwards make a lookup to pad this binary binary if necessary:
 
 ```js
 // ... class QRCodeConstants
 static CharacterCountIndicatorSize = {
-        'numeric' : 10,
-        'alphanum' : 9
+    'numeric' : 10,
+    'alphanum' : 9
 };
 ```
+
+(For e.g. 'HELLO WORLD' we have a length of 11; 11 is 1011 in binary; because we use alphanumeric encoding, the length needs to be 9 bits, so we add 5 0's in front and get 000001011)
 
 ### Data
 
@@ -162,7 +178,7 @@ After that, let's encode some data! Depending on whether we use numeric or alpha
 
 #### Numeric mode
 
-In numeric enecoding, we split our data into groups of three digits, convert them to a number (100 * firstDigit + 10 * secondDigit + thirdDigit) and convert them into a binary string which has a size of 10 (so we need padding if necessary). If the length of our string is not a multiple of 3, then we are left with either groups of two or a single character. If we have two characters remaining, then we need to pad our number to a length of 7, otherwise 4 characters suffice.
+In numeric enecoding, we split our data into groups of three digits, convert them to a number (100 * firstDigit + 10 * secondDigit + thirdDigit) and convert them into a binary string which has a length of 10 (so we need padding if necessary). If the length of our string is not a multiple of 3, then we are left with either groups of two or a single character. If we have two characters remaining, then we need to pad our number to a length of 7, otherwise 4 characters suffice.
 
 This is implementented as follows:
 
@@ -209,6 +225,14 @@ encodeNumeric() {
 
 
 #### Alphanumeric
+
+In alphanumeric encoding we split our string in groups of 2. Then we convert this pair of characters to a number as follows
+
+```
+firstChar * 45 + secondChar
+```
+
+and pad the resulting binary number to have a length of 11. If our string has 1 remaining character then simply convert it to a number and pad the binary to 6 places. All of this does the following function:
 
 
 ```js
