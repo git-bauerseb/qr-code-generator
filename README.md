@@ -1,12 +1,14 @@
 # About
 
-This tutorial contains a sort of tutorial on how to create a simple QR code generator in Javascript.
+This repository contains a sort of tutorial on how to create a simple QR code generator in Javascript.
 
-!['Hello World' QR code](img/qr_code_header.png)
 
 ## Tutorial
 
 QR codes are ubiquitous and can be found nearly everywhere on physical items to websites and apps. While there are many libraries that make encoding/decoding very simple, there are, is far as I know, no good tutorials that show how to write a QR code generator from scratch. This now is exactly the goal of this repository: To just use some Javascript and an HTML svg element to produce QR codes that you can scan and decode with your phone. So let's jump into it.
+
+
+!['Hello World' QR code](img/qr_code_header.png)
 
 
 ## General
@@ -43,7 +45,6 @@ First, we need to decide what we actually want to encode, so let's create a cons
 
 ```js
 class QRCodeGenerator {
-
     constructor(data) {
         this.data = data;
     }
@@ -74,22 +75,22 @@ Because the numeric mode is a subset of the alphanumeric, we need a function tha
 ```js
 // ... class QRCodeGenerator
 determineMode() {
-        let data = this.data;
-        
-        let alphanum = false;
-        let numeric = true;
+    let data = this.data;
     
-        for (let i = 0; i < data.length; i++) {
-            // Check if all characters are numeric
-            numeric &= QRCodeConstants.Numeric.indexOf(data[i]) >= 0;
-            alphanum = QRCodeConstants.Alphanumeric.indexOf(data[i]) >= 0;
+    let alphanum = false;
+    let numeric = true;
 
-            if (!numeric) {
-                break;
-            }
+    for (let i = 0; i < data.length; i++) {
+        // Check if all characters are numeric
+        numeric &= QRCodeConstants.Numeric.indexOf(data[i]) >= 0;
+        alphanum = QRCodeConstants.Alphanumeric.indexOf(data[i]) >= 0;
+
+        if (!numeric) {
+            break;
         }
-    
-        return numeric ? "numeric" : "alphanum";
+    }
+
+    return numeric ? "numeric" : "alphanum";
 }
 ```
 
@@ -126,10 +127,10 @@ For the mode indicator, simply define some constants:
 
 ```js
 // ... class QRCodeConstants
-    static ModeIndicator = {
-        'numeric' : '0001',
-        'alphanum' : '0010'
-    }
+static ModeIndicator = {
+    'numeric' : '0001',
+    'alphanum' : '0010'
+}
 ```
 
 When we compose our message later on, we will simple look the mode up in this dictionary.
@@ -142,9 +143,9 @@ For this define the following utility function which converts a number to a bina
 
 ```js
 // ... class QRCodeUtility
-    static decimalToBinary(dec) {
-        return (dec >>> 0).toString(2);
-    }
+static decimalToBinary(dec) {
+    return (dec >>> 0).toString(2);
+}
 ```
 
 and in `QRCodeGenerator` define a new function `getCharacterCountIndicator()`:
@@ -238,82 +239,120 @@ and pad the resulting binary number to have a length of 11. If our string has 1 
 ```js
 // ... class QRCodeGenerator
 encodeAlpha() {
-        let encoded = '';
-    
-        for (let i = 0; i < this.data.length - 1; i += 2) {
-    
-            let firstVal = QRCodeConstants.Alphanumeric.indexOf(data[i]);
-            let secondVal = QRCodeConstants.Alphanumeric.indexOf(data[i + 1]);
-            let binary = QRCodeUtility.decimalToBinary(firstVal * 45 + secondVal);
+    let encoded = '';
 
-            encoded += binary.padStart(11, '0');
-        }
-    
-        // If an odd number of characters are in the data
-        // then append encoding of final character as 6-bit number
-        if (data.length % 2 == 1) {
-            encoded += QRCodeUtility.decimalToBinary(QRCodeConstants.Alphanumeric.indexOf(data[data.length - 1]))
-                .padStart(6, '0');
-        }
-    
-        return encoded;
+    for (let i = 0; i < this.data.length - 1; i += 2) {
+
+        let firstVal = QRCodeConstants.Alphanumeric.indexOf(data[i]);
+        let secondVal = QRCodeConstants.Alphanumeric.indexOf(data[i + 1]);
+        let binary = QRCodeUtility.decimalToBinary(firstVal * 45 + secondVal);
+
+        encoded += binary.padStart(11, '0');
     }
+
+    // If an odd number of characters are in the data
+    // then append encoding of final character as 6-bit number
+    if (data.length % 2 == 1) {
+        encoded += QRCodeUtility.decimalToBinary(QRCodeConstants.Alphanumeric.indexOf(data[data.length - 1]))
+            .padStart(6, '0');
+    }
+
+    return encoded;
+}
 ```
 
 ### Padding
 
+Because we can encode strings of variable length, we need to introduce padding. For this, we first need to now how many bits actually fit in the code for our choosen version and error correction level.
 
-## Error Correction
-
-After a quite lengthy journey of padding and conversion from numbers to bits, we know arrived at the error correction.
-
-For this, we need to destroy our nicely built string and chop it into bytes.
-
-So add the following in the encode function:
+In our case, a version 1-L code, there can be 19 bytes and thus 19*8 bits:
 
 ```js
-// ... encode() in QRCodeGenerator
-// ...
-let bytes = this.makeBytes(composed);
-let byteStr = '';
-bytes.forEach(b => {
-    byteStr += b.toString(16).padStart(2, '0') + ' ';
-});
-
-console.log(byteStr);
-```
-
-and add this method:
-
-```js
-makeBytes(str) {
-    let bytes = [];
-
-    for (let i = 0; i < str.length; i += 8) {
-        let substr = str.substring(i, i + 8);
-        bytes.push(parseInt(substr, 2));
-    }
-
-    return bytes;
+// ... class QRCodeGenerator
+getCapacity() {
+    return 19 * 8;
 }
 ```
 
-If you've done everything like I did, then you should see the string
+### Encoding Function
 
+Now is a good place to introduce the actual encoding function:
+
+```js
+// ... class QRCodeGenerator
+encode() {
+    this.mode = this.determineMode();
+
+    let charIndicator = this.getCharacterCountIndicator();
+    let dataEncoded = null;
+    
+    switch (this.mode) {
+        case 'numeric' : dataEncoded = this.encodeNumeric(); break;
+        case 'alphanum' : dataEncoded = this.encodeAlpha(); break; 
+    }
+
+    let composed = QRCodeConstants.ModeIndicator[this.mode] + charIndicator + dataEncoded;
+}
 ```
-20 5b 0b 78 d1 72 dc 4d 43 40 ec 11 ec 11 ec 11 ec 11 ec 
+
+We first determine the mode here. Afterwards we get the character count (which uses `this.mode` for case distinction). Then we encode our data and finally put everything together in the string `composed`.
+
+#### 0 padding
+
+If our composed string is too short (less than capacity bits), then we first pad it with up to 4 zero bits:
+
+```js
+// encode() in class QRCodeGenerator
+// ...
+let capacity = this.getCapacity();
+let zerosToAdd = Math.min(4, Math.max(0,capacity - composed.length));
+composed = composed.padEnd(composed.length + zerosToAdd, '0');
 ```
 
-which are our data bits encoded and split up into bytes. Be sure, that your output string matches exactly this one as it will be crucial for a correct generation of the QR code.
+Afterwards, if it is still too short, we add another group of 0s to get a length of our `composed` string which is a multiple of 8:
 
-#### Reed-Solomon Error Correction
+```js
+// encode() in class QRCodeGenerator
+// ...
+let padZeros = (8 - (composed.length % 8));
 
-When I said at the beginning that we will only need three classes, I made a little lie. In fact, we'll need a fourth class **ReedSolomonCode** that handles all the error correction stuff. I initially thought, it would be a good idea to keep everything in the **QRCodeGenerator** class but this turned into a mess. So, to keep everything nicely separated, we will add the whole error correction functionality here.
+if (padZeros + composed.length <= capacity) {
+    composed = composed.padEnd(composed.length + padZeros, '0');
+}
+```
 
-The next stop is a little discussion about finite fields. If you have a strong math background and now about galois fields and polynomials defined over them, you can safely skip this and just copy and paste the code.
+#### Byte padding
 
-##### Finite field arithmetic
+If our string is still too short, then we add a specific byte pattern. This is done, to make the scanning of the QR code easier (large areas of white cells are not ideal).
 
-When I was in school, I was taught that there are basically four number systems: Natural numbers, Integers, Rationals and Reals. As they kept defining new number systems, my abilities to express new mathematical things constantly grew. First, I could only work with positive numbers, then I was able to negate them and in the end, I could even do fancy things like sqrt(2)^2 = 2.
+First, define the padding string in our constants class:
 
-Now, those number systems are nice and we can do a lot with them. But they have one big downside: they are not limited and thus not really suitable 
+```js
+// ... class QRCodeConstants
+static Pattern = "1110110000010001";
+```
+
+and implement the padding functionalty in **QRCodeGenerator**:
+
+```js
+addBytePadding(str, capacity) {
+
+    let idx = 0;
+
+    while (str.length != capacity) {
+        str += QRCodeConstants.Pattern[idx % QRCodeConstants.Pattern.length];
+        idx++;
+    }
+
+    return str;
+}
+```
+
+This appends bytes to our input string until it reaches the desired length. By using modulo, we move back to the beginning of the pattern once we reached the last character.
+
+Once we've done this, we can finalize our implementation of our `encode` function:
+
+```js
+composed = this.addBytePadding(composed, capacity);
+return pattern
+```
