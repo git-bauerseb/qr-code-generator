@@ -131,6 +131,8 @@ class QRCodeGenerator {
 
         composed = this.addBytePadding(composed, capacity);
 
+        console.log(composed);
+
 
         // Split binary string into bytes for error correction
         let bytes = QRCodeUtility.stringToBytes(composed);
@@ -833,7 +835,7 @@ setupQRCodeDrawing();
 
 // 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:
 
-let generator = new QRCodeGenerator('HELLO WORLD+-/ 123 $%');
+let generator = new QRCodeGenerator('HELLO WORLD+-/123$%');
 let data = generator.encode();
 
 
